@@ -1,0 +1,69 @@
+diff --git a/crates/ui-egui/src/dialogs/show.rs b/crates/ui-egui/src/dialogs/show.rs
+index e4cd5bb..aa2237a 100644
+--- a/crates/ui-egui/src/dialogs/show.rs
++++ b/crates/ui-egui/src/dialogs/show.rs
+@@ -338,11 +338,14 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
+                     }
+                 }
+                 "saveChanges" => {
+-                    ui.label(format!("Do you want to save the changes you made to {}?", d.values.get("title").and_then(Json::as_str).unwrap_or("this workbook")));
++                    let lang = app.ui.language;
++                    let raw = d.values.get("title").and_then(Json::as_str).unwrap_or("this workbook");
++                    let title = lang.tr(raw);
++                    ui.label(lang.tr("Do you want to save the changes you made to {title}?").replace("{title}", title));
+                     let quitting = d.values.get("quit").and_then(Json::as_bool) == Some(true);
+                     ui.horizontal(|ui| {
+                         for (label, answer) in
+-                            [("Don't Save", crate::SaveAnswer::DontSave), ("Cancel", crate::SaveAnswer::Cancel), ("Save", crate::SaveAnswer::Save)]
++                            [(lang.tr("Don't Save"), crate::SaveAnswer::DontSave), (lang.tr("Cancel"), crate::SaveAnswer::Cancel), (lang.tr("Save"), crate::SaveAnswer::Save)]
+                         {
+                             if ui.button(label).clicked() && app.answer_save_changes(answer, quitting, ui.ctx()) {
+                                 open = false;
+diff --git a/crates/ui-egui/src/i18n/zh.rs b/crates/ui-egui/src/i18n/zh.rs
+index e71a0df..fcc4765 100644
+--- a/crates/ui-egui/src/i18n/zh.rs
++++ b/crates/ui-egui/src/i18n/zh.rs
+@@ -396,6 +396,13 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
+         "Protect Workbook" => "保护工作簿",
+         "Sheet structure is locked: sheets can't be added, moved, renamed or deleted." => "工作表结构已锁定：无法添加、移动、重命名或删除工作表。",
+         "Lock the sheet structure so sheets can't be added, moved, renamed or deleted." => "锁定工作表结构，使工作表无法被添加、移动、重命名或删除。",
++        // 保存更改确认（文件›关闭 / 退出、宏编辑器关闭）。
++        "Save Changes?" => "保存更改？",
++        "Do you want to save the changes you made to {title}?" => "是否要保存对 {title} 所做的更改？",
++        "Save changes to macro “{name}”?" => "是否要保存对宏“{name}”的更改？",
++        "Don't Save" => "不保存",
++        "Cancel" => "取消",
++        "this workbook" => "此工作簿",
+         "Properties" => "属性",
+         "Title" => "标题",
+         "Subject" => "主题",
+diff --git a/crates/ui-egui/src/macro_editor.rs b/crates/ui-egui/src/macro_editor.rs
+index 2dc52ed..49ffe11 100644
+--- a/crates/ui-egui/src/macro_editor.rs
++++ b/crates/ui-egui/src/macro_editor.rs
+@@ -1142,18 +1142,21 @@ fn prompts(app: &mut SheetApp, ctx: &egui::Context, ed: &mut Editor, open: &mut
+     }
+     if ed.ask_close {
+         let mut answer: Option<Option<bool>> = None;
++        let lang = app.ui.language;
++        let name = ed.draft.name.clone();
++        let body = lang.tr("Save changes to macro “{name}”?").replace("{name}", &name);
+         egui::Modal::new(Id::unique("gridcraft.macro_editor.close")).show(ctx, |ui| {
+             ui.set_width(360.0);
+-            ui.label(egui::RichText::new(format!("Save changes to macro “{}”?", ed.draft.name)).strong());
++            ui.label(egui::RichText::new(body.as_str()).strong());
+             ui.add_space(8.0);
+             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+-                if ui.button("Cancel").clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
++                if ui.button(lang.tr("Cancel")).clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                     answer = Some(None);
+                 }
+-                if ui.button("Don't Save").clicked() {
++                if ui.button(lang.tr("Don't Save")).clicked() {
+                     answer = Some(Some(false));
+                 }
+-                if ui.button("Save").clicked() || ui.input(|i| i.key_pressed(egui::Key::Enter)) {
++                if ui.button(lang.tr("Save")).clicked() || ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                     answer = Some(Some(true));
+                 }
+             });

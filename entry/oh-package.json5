@@ -1,0 +1,11 @@
+{
+  "name": "entry",
+  "version": "0.1.0",
+  "description": "GridCraft HarmonyOS entry module",
+  "main": "",
+  "author": "",
+  "license": "MIT OR Apache-2.0",
+  "dependencies": {
+    "libgridcraft.so": "file:./src/main/cpp/types/libgridcraft"
+  }
+}

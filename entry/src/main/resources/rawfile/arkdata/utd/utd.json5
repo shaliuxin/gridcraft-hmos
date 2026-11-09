@@ -1,0 +1,27 @@
+{
+  "UniformDataTypeDeclarations": [
+    {
+      "TypeId": "io.github.shaliuxin.gridcraft.hmos.xlsx",
+      "BelongingToTypes": [
+        "general.file"
+      ],
+      "FilenameExtensions": [
+        ".xlsx",
+        ".xlsm",
+        ".xls",
+        ".ods",
+        ".csv",
+        ".tsv"
+      ],
+      "MIMETypes": [
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.ms-excel",
+        "application/vnd.oasis.opendocument.spreadsheet",
+        "text/csv",
+        "text/tab-separated-values"
+      ],
+      "Description": "GridCraft spreadsheet",
+      "ReferenceURL": ""
+    }
+  ]
+}

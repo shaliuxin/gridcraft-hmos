@@ -1,0 +1,26 @@
+# HarmonyOS (OHOS) cross-link configuration for the local DevEco Studio SDK.
+#
+# The OHOS native toolchain ships a clang.exe plus a sysroot. On Windows the
+# `*-unknown-linux-ohos-clang` wrappers are POSIX shell scripts, so rustc must
+# be pointed directly at clang.exe with an explicit --target and -sysroot.
+#
+# Paths use the space-free junction C:\ohosnative (created by scripts/build_native.sh
+# when the real SDK path contains a space, e.g. "C:\Program Files\Huawei\..."),
+# because cc-rs word-splits CFLAGS and a spaced --sysroot breaks.
+
+[target.aarch64-unknown-linux-ohos]
+linker = "C:/ohosnative/llvm/bin/clang.exe"
+rustflags = [
+  "-C", "link-arg=--target=aarch64-linux-ohos",
+  "-C", "link-arg=--sysroot=C:/ohosnative/sysroot",
+]
+
+[target.x86_64-unknown-linux-ohos]
+linker = "C:/ohosnative/llvm/bin/clang.exe"
+rustflags = [
+  "-C", "link-arg=--target=x86_64-linux-ohos",
+  "-C", "link-arg=--sysroot=C:/ohosnative/sysroot",
+]
+
+[build]
+# Keep network off during verification; all deps are vendored / in the registry cache.

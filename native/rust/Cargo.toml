@@ -1,0 +1,55 @@
+[package]
+name = "gridcraft-hmos"
+version = "0.16.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[lib]
+name = "gridcraft_hmos"
+crate-type = ["staticlib"]
+
+[dependencies]
+# 上游前端与引擎：path 依赖，上游文件零改动。GridCraft 的 SheetApp 已把宿主缝直接暴露为
+# new(Session, Services) / setup_context / logic / raw_input_hook / ui / run / open_path，
+# 无需 patch 上游 ui-egui（与 solidcraft 的 SolveApp 同构）。
+gridcraft-ui-egui = { path = "../../../gridcraft/crates/ui-egui" }
+gridcraft-engine = { path = "../../../gridcraft/crates/engine" }
+# egui 0.37 / egui-wgpu 0.37：与 gridcraft 根 Cargo.toml 的 [patch] 同一 git fork rev，
+# 否则跨边界 egui 类型全对不上（与 solidcraft 0.36 的教训同源）。
+egui = { version = "0.37", features = ["default_fonts"] }
+egui-wgpu = { version = "0.37" }
+# GLES/EGL 后端是鸿蒙 NDK 能直接用的那套；丢 gles 鸿蒙就没渲染后端（与 photocraft/solidcraft 同源教训）。
+wgpu = { version = "30", default-features = false, features = ["std", "wgsl", "gles"] }
+pollster = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+log = "0.4"
+raw-window-handle = "0.6"
+libc = "0.2"
+
+# [patch] 只对 workspace 根生效；本适配层是独立 workspace，必须把 gridcraft 根 Cargo.toml 的
+# [patch.crates-io] 整段抄过来，再叠加 wgpu-hal 的鸿蒙 GLES 修补（沿用 solidcraft 验证过的 30.0.1）。
+# craft-libs（craft-ui/craft-update/craft-window/craft-pdf/krilla）在 gridcraft 各 crate 里是
+# 直接 git 依赖（非 workspace = true），Cargo 按其 manifest 的 git URL+rev 直接解析，故不在此 patch。
+[patch.crates-io]
+# egui 全家桶与 winit：gridcraft 用的 fork，rev 必须与上游锁一致。
+ecolor = { git = "https://github.com/storytold/egui.git", rev = "6d518fc799681571963842f95b55a6b68431b15a" }
+emath = { git = "https://github.com/storytold/egui.git", rev = "6d518fc799681571963842f95b55a6b68431b15a" }
+epaint = { git = "https://github.com/storytold/egui.git", rev = "6d518fc799681571963842f95b55a6b68431b15a" }
+epaint_default_fonts = { git = "https://github.com/storytold/egui.git", rev = "6d518fc799681571963842f95b55a6b68431b15a" }
+egui = { git = "https://github.com/storytold/egui.git", rev = "6d518fc799681571963842f95b55a6b68431b15a" }
+egui-winit = { git = "https://github.com/storytold/egui.git", rev = "6d518fc799681571963842f95b55a6b68431b15a" }
+egui-wgpu = { git = "https://github.com/storytold/egui.git", rev = "6d518fc799681571963842f95b55a6b68431b15a" }
+egui_glow = { git = "https://github.com/storytold/egui.git", rev = "6d518fc799681571963842f95b55a6b68431b15a" }
+egui_extras = { git = "https://github.com/storytold/egui.git", rev = "6d518fc799681571963842f95b55a6b68431b15a" }
+egui_kittest = { git = "https://github.com/storytold/egui.git", rev = "6d518fc799681571963842f95b55a6b68431b15a" }
+egui_system_font_provider = { git = "https://github.com/storytold/egui.git", rev = "6d518fc799681571963842f95b55a6b68431b15a" }
+eframe = { git = "https://github.com/storytold/egui.git", rev = "6d518fc799681571963842f95b55a6b68431b15a" }
+egui_demo_lib = { git = "https://github.com/storytold/egui.git", rev = "6d518fc799681571963842f95b55a6b68431b15a" }
+egui_inspection = { git = "https://github.com/storytold/egui.git", rev = "6d518fc799681571963842f95b55a6b68431b15a" }
+winit = { git = "https://github.com/storytold/winit.git", rev = "a517b3846ee8457d84ee4975110bfda6797c44dc" }
+# wgpu-hal：鸿蒙 GLES 需 uniform-block 修补，沿用 solidcraft 验证过的同一 30.0.1，目录不存在即报错。
+wgpu-hal = { path = "../../third_party/wgpu-hal-30.0.1" }
+
+[workspace]
