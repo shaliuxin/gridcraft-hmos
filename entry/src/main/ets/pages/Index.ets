@@ -6,6 +6,7 @@ import { BusinessError, deviceInfo } from '@kit.BasicServicesKit';
 import pasteboard from '@ohos.pasteboard';
 import print from '@ohos.print';
 import { display } from '@kit.ArkUI';
+import { inputMethod } from '@kit.IMEKit';
 import { SYSTEM_THEME_DARK, SYSTEM_THEME_LIGHT } from '../SystemTheme';
 
 // Mirrors the Rust `Config` deserialized in native/rust/src/lib.rs.
@@ -103,6 +104,14 @@ struct Index {
   // 系统「打开方式」：EntryAbility 把 want.uri 写进 AppStorage。应用已在前台时页面不会重新
   // aboutToAppear，必须用 @StorageLink/@Watch 监听变化并立即消费，否则文件永远打不开。
   @StorageLink('gridcraftOpenWant') @Watch('onOpenWantChanged') private openWantUri: string = '';
+  // 中文输入法（与 DeckCraft / WordCraft 同一修法）：attach 前必须有一个获焦的 ArkUI
+  // 编辑组件（XComponent 原生表面不算），监听器必须在 attach 成功之后注册（否则 12800009）。
+  private imeController: inputMethod.InputMethodController | undefined = undefined;
+  private imeAttached: boolean = false;
+  private imeShown: boolean = false;
+  private imeInComposition: boolean = false;
+  private imeBound: boolean = false;
+  private imeWanted: boolean = false;
 
   aboutToAppear(): void {
     console.info('GridCraft native page appearing');
@@ -270,7 +279,129 @@ struct Index {
       // 打印：引擎的 submit_print 已生成打印用 PDF，宿主写进沙箱后经 print.print([uri], context)
       // 弹系统打印页（需 ohos.permission.PRINT）。起打印页后立即回包唤醒 Rust worker。
       this.printPdf(id, request.text, data);
+    } else if (request.kind === 'ime') {
+      // Rust 通知：egui 文本字段获得/失去焦点 → 弹起/收起软键盘。
+      this.setImeKeyboard(request.text === 'show');
     }
+  }
+
+  // ===================== 中文输入法（IME） =====================
+  // 顺序（实测必须）：锚点获焦 → attach(showKeyboard=true) → attach 成功后注册监听。
+  // 否则 attach 报 12800003（编辑框未获焦）或监听注册报 12800009（未附加）。
+
+  private imeControllerOrGet(): inputMethod.InputMethodController | undefined {
+    if (this.imeController) {
+      return this.imeController;
+    }
+    try {
+      const controller: inputMethod.InputMethodController = inputMethod.getController();
+      this.imeController = controller;
+      return controller;
+    } catch (error) {
+      console.error(`GridCraft IME controller failed: ${(error as Error).message}`);
+      return undefined;
+    }
+  }
+
+  private bindImeListeners(controller: inputMethod.InputMethodController): void {
+    if (this.imeBound) {
+      return;
+    }
+    try {
+      // insertText = 已确认上屏文本；setPreviewText = 拼音组合态；finishTextPreview = 组合结束；
+      // deleteLeft = 退格（组合态内由键盘自行处理）；sendFunctionKey = 回车；sendKeyboardStatus = 显隐。
+      controller.on('insertText', (text: string): void => { this.sendIme('commit', text); });
+      controller.on('setPreviewText', (text: string, _range: inputMethod.Range): void => {
+        this.imeInComposition = (text.length > 0);
+        this.sendIme('preedit', text);
+      });
+      controller.on('finishTextPreview', (): void => { this.imeInComposition = false; this.sendIme('preedit', ''); });
+      controller.on('deleteLeft', (length: number): void => {
+        if (!this.imeInComposition) { this.sendIme('delete', String(length)); }
+      });
+      controller.on('sendFunctionKey', (_key: inputMethod.FunctionKey): void => { this.sendIme('enter', ''); });
+      controller.on('sendKeyboardStatus', (status: inputMethod.KeyboardStatus): void => {
+        this.imeShown = (status === inputMethod.KeyboardStatus.SHOW);
+      });
+      this.imeBound = true;
+      console.info('GridCraft IME listeners bound');
+    } catch (error) {
+      console.warn(`GridCraft IME bind failed: ${(error as Error).message}`);
+    }
+  }
+
+  private async setImeKeyboard(show: boolean): Promise<void> {
+    if (!this.alive) {
+      return;
+    }
+    this.imeWanted = show;
+    const controller = this.imeControllerOrGet();
+    if (!controller) {
+      return;
+    }
+    if (show) {
+      try {
+        this.getUIContext().getFocusController().requestFocus('gridcraft-ime-anchor');
+      } catch (error) {
+        console.warn(`GridCraft IME anchor focus failed: ${(error as Error).message}`);
+      }
+      try {
+        await controller.attach(true, this.imeTextConfig());
+        this.imeAttached = true;
+        this.imeShown = true;
+        console.info('GridCraft IME attached');
+      } catch (error) {
+        console.warn(`GridCraft IME attach failed: ${(error as Error).message}`);
+        try {
+          await controller.showTextInput(inputMethod.RequestKeyboardReason.OTHER);
+          this.imeAttached = true;
+          this.imeShown = true;
+        } catch (e2) {
+          console.warn(`GridCraft IME show failed: ${(e2 as Error).message}`);
+        }
+      }
+      if (this.imeAttached) {
+        // attach(true) 在 PC 多窗口/外接键盘模式下可能只弹「输入法悬浮工具栏」而不展开
+        // 键盘面板；再显式以 TOUCH 原因请求一次，尽量展开软键盘。
+        try {
+          await controller.showTextInput(inputMethod.RequestKeyboardReason.TOUCH);
+        } catch (error) {
+          console.warn(`GridCraft IME showTextInput failed: ${(error as Error).message}`);
+        }
+        this.bindImeListeners(controller);
+      }
+    } else {
+      this.imeInComposition = false;
+      try {
+        if (this.imeAttached) { await controller.hideTextInput(); }
+      } catch (error) {
+        console.warn(`GridCraft IME hide failed: ${(error as Error).message}`);
+      }
+      try {
+        if (this.imeAttached) { await controller.detach(); }
+      } catch (error) {
+        // 未绑定 / 重复 detach：忽略。
+      }
+      this.imeAttached = false;
+      this.imeShown = false;
+    }
+  }
+
+  private imeTextConfig(): inputMethod.TextConfig {
+    return {
+      inputAttribute: {
+        textInputType: inputMethod.TextInputType.TEXT,
+        enterKeyType: inputMethod.EnterKeyType.NEWLINE,
+        consumeKeyEvents: true,
+      },
+    };
+  }
+
+  private sendIme(op: string, text: string): void {
+    if (!this.alive) {
+      return;
+    }
+    native.input(JSON.stringify({ kind: 'ime', op, text }));
   }
 
   private async pickDocument(id: number, _gallery: boolean): Promise<void> {
@@ -449,8 +580,25 @@ struct Index {
           .onLoad((): void => {
             try { this.getUIContext().getFocusController().requestFocus('gridcraft-editor'); } catch (e) {}
           })
-          .id('gridcraft-editor').focusable(true).defaultFocus(true).focusOnTouch(true)
+          // 不设 focusOnTouch：打字期间点击画布若把焦点抢回 XComponent（非编辑代理），
+          // 会断开输入法绑定导致键盘收起；触摸/指针事件不经 ArkUI 焦点，不受影响。
+          .id('gridcraft-editor').focusable(true).defaultFocus(true)
       }
+      // 隐藏的 IME 锚点：输入法框架只认「获得焦点的编辑组件」为可输入位置，
+      // attach 前必须先聚焦它（官方自定义编辑框方案）。
+      Text('')
+        .id('gridcraft-ime-anchor')
+        .focusable(true)
+        .width(1).height(1)
+        .opacity(0)
+        .hitTestBehavior(HitTestMode.None)
+        .onBlur((): void => {
+          if (this.imeAttached) {
+            this.imeAttached = false;
+            this.imeShown = false;
+            console.info('GridCraft IME anchor blurred, binding reset');
+          }
+        })
       if (this.startupVisible) {
         Column() {
           Column({ space: 18 }) {

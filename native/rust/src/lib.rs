@@ -443,6 +443,8 @@ fn worker(config: Config, rx: mpsc::Receiver<Message>) {
     let mut events: Vec<egui::Event> = Vec::new();
     let mut input_state = input::State::default();
     let mut close = false;
+    // 软键盘是否已由宿主弹起：避免每帧重复通知，仅在 egui 文本焦点变化时切换。
+    let mut ime_shown = false;
 
     ctx.set_request_repaint_callback(|info| send(Message::Wake(info.delay)));
     bridge::notify(0, "ready", "Native host initialized", &[]);
@@ -474,6 +476,8 @@ fn worker(config: Config, rx: mpsc::Receiver<Message>) {
                         render.bind(render::Window(ptr), w, h)?;
                         bridge::resume();
                         deadline = Some(Instant::now());
+                        // 重连后重置软键盘状态，下一帧按实际焦点重新评估显隐。
+                        ime_shown = false;
                         bridge::notify(0, "ready", "Native egui / wgpu GLES", &[]);
                     }
                     Message::Resize(w, h) => {
@@ -486,6 +490,9 @@ fn worker(config: Config, rx: mpsc::Receiver<Message>) {
                         deadline = None;
                         render.detach();
                         input_state.cancel(&mut events);
+                        // 表面销毁时收起软键盘并重置状态，避免重连后状态错乱。
+                        ime_shown = false;
+                        bridge::notify(0, "ime", "hide", &[]);
                     }
                     Message::Active(value) => {
                         active = value;
@@ -586,6 +593,13 @@ fn worker(config: Config, rx: mpsc::Receiver<Message>) {
                             if let egui::OutputCommand::OpenUrl(url) = command {
                                 bridge::notify(0, "url", &url.url, &[]);
                             }
+                        }
+                        // 软键盘随文本焦点自动弹起/收起：egui 在有文本字段获得焦点时把
+                        // `platform_output.ime` 置为 Some，宿主据此显隐系统输入法键盘。
+                        let ime_wanted = output.platform_output.ime.is_some();
+                        if ime_wanted != ime_shown {
+                            ime_shown = ime_wanted;
+                            bridge::notify(0, "ime", if ime_wanted { "show" } else { "hide" }, &[]);
                         }
                         let mut commands = Vec::new();
                         let mut repaint_delay: Option<Duration> = None;

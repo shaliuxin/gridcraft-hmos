@@ -171,6 +171,19 @@ HDC="$DEV/sdk/default/openharmony/toolchains/hdc.exe"
 
 ---
 
+## 中文输入法（IME，2026-11-09 真机通过）
+
+与 DeckCraft / WordCraft 同构（锚点 id `gridcraft-ime-anchor`）：`requestFocus(锚点)` →
+`await attach(true, textConfig)` → **attach 成功后**注册 `insertText/setPreviewText/finishTextPreview/
+deleteLeft/sendFunctionKey`（提前注册抛 `12800009 detached`，键盘完全不弹）→ `showTextInput(TOUCH)` 兜底。
+XComponent 已去 `.focusOnTouch(true)`。真机实测点单元格：`ime: show` → `IME attached` →
+`listeners bound`，点空白 `ime: hide`，重复触发正常。
+
+> PC 多窗口 + 外接物理键盘时系统不自动展开软键盘面板（系统「备忘录」同样只有悬浮工具栏），
+> 需点右下悬浮栏 ⌨ 展开，属系统策略。
+
+---
+
 ## 已知限制
 
 详见 [`移植报告.md` §6](./移植报告.md)。三条评估结论已明确为**非缺陷**：
