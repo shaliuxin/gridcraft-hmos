@@ -2,8 +2,8 @@
   "app": {
     "bundleName": "io.github.shaliuxin.gridcraft.hmos",
     "vendor": "gridcraft-hmos",
-    "versionCode": 18000,
-    "versionName": "0.18.0",
+    "versionCode": 19001,
+    "versionName": "0.19.1",
     "icon": "$media:app_icon",
     "label": "$string:app_name"
   }
