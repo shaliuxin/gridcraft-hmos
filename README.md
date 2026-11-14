@@ -219,3 +219,23 @@ XComponent 已去 `.focusOnTouch(true)`。真机实测点单元格：`ime: show`
   [`LICENSE-APACHE`](./LICENSE-APACHE)、[`LICENSE-MIT`](./LICENSE-MIT)。
 - 上游仓库：<https://github.com/storytold/gridcraft>
 - 姊妹工程：<https://github.com/shaliuxin/wordcraft-hmos>、<https://github.com/shaliuxin/solidcraft-hmos>
+
+---
+
+## ⚠️ 移植必查：OHOS 平台判定与资源探测（2026-11-11 全项目强制）
+
+OHOS triple 仍报告 `target_os = "linux"`。上游里靠 `#[cfg(target_os = "linux")]` 分派的 Linux 专属逻辑（cgroup / procfs / 内存探测 / 字体路径 / 系统目录）在鸿蒙应用沙箱里会被误用，而且编译链接全绿、只在运行时出怪错。PhotoCraft v0.22.0 曾因此把可用内存测成 `0`，所有稍大的照片都报 `not enough memory ... 0.0 GB is free`。
+
+开工 / 每次上游升级后必做：① `grep -rn 'target_os = "linux"\|cfg(unix)' <上游>/crates` 逐个判断平台假设；② OHOS 分支只用 `#[cfg(target_env = "ohos")]`，Linux 分支加 `not(target_env = "ohos")`；③ 资源探测「测不到」返回 `UNKNOWN`，绝不返回 `Some(0)`；④ 用「文件小、解码内存大」的样本做真机前后对照验收。完整根因链、修复模板与验收手法见《craft-鸿蒙移植通用检查清单》文首 ⭐ 铁律与 §18。
+
+> 出处（MLA）：「§18. PhotoCraft 追加经验」，*craft-鸿蒙移植通用检查清单.md*, 本地工作区 `C:/Users/mingh/WorkBuddy/2026-11-01-23-18-01/`, 11 Nov. 2026.
+
+---
+
+## ⚠️ 移植必查：关窗保存确认（2026-11-11 全项目强制）
+
+凡能编辑文档、会产生未保存状态的项目，点系统窗口 X（或返回手势）**必须**先走引擎的「是否保存」确认；未保存时静默退出属**数据丢失级缺陷**。该链路跨 ArkTS 拦截层、Rust 逻辑相帧顺序、上游「允许关闭」信号三层，任一层缺失都能编译通过、正常启动，但点 X 就是不弹框。
+
+开工 / 每次上游升级后必做：① 先 `grep` 本上游用什么表达「可以关窗」（`allow_close` / `close_requested` / `ui.status` / `CancelClose`），绝不照抄兄弟工程字段；② ArkTS 只订阅一个窗口级关窗事件并直连 `native.close(); return true;`；③ **头号根因**：Rust `tick` 必须放进 `ctx.run_ui` 的 pass 内、`ui()` 之前，否则 `ViewportEvent::Close` 当帧不可见 → 静默关窗；④ 绝不把「本帧没有 `CancelClose`」当成「无未保存」；⑤ 关窗期间强制出帧（`active || close`）；⑥ **真机三态人工验收** Save / Don't Save / Cancel，hilog 里 `RegisterListener` 只证明监听器注册，不等于修好。完整 12 项必查清单见《craft-鸿蒙移植通用检查清单》文首 ⭐ 关窗保存确认铁律、§15 / §15.1 与 §19。
+
+> 出处（MLA）：「⭐ 关窗保存确认铁律」，*craft-鸿蒙移植通用检查清单.md*, 本地工作区 `C:/Users/mingh/WorkBuddy/2026-11-01-23-18-01/`, 10–11 Nov. 2026.
